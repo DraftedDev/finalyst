@@ -34,7 +34,11 @@ const DEFAULT_SOURCES: &[&str] = &[
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839135",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
+    "https://thedefiant.io/api/feed",
+    "https://cryptopotato.com/feed/",
     "https://www.forbes.com/innovation/feed",
+    "https://cepr.org/rss/vox-content",
+    "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
 ];
 
 pub struct Model {
