@@ -439,7 +439,8 @@ Simplify the provided text to a clean, concise summary.
 RULES:
 - Remove all marketing fluff, boilerplate text, and 'click for more' links.
 - Retain all specific numbers, percentages, and ticker symbols.
-- Summarize the event in 3-5 bullet points.
+- Summarize the event in a few bullet points.
+- Always use the same format (- <point>) for each bullet point.
 - If a specific company is the focus, put the TICKER symbol at the start.
 - Output ONLY the clean summary. No conversational filler."
                 "#.to_string(),
