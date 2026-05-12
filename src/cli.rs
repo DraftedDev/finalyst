@@ -8,8 +8,12 @@ use crate::model::Model;
 #[derive(Parser)]
 pub struct Cli {
     /// Path to the configuration file.
-    #[clap(short = 'c', long = "config", default_value = "config.toml")]
+    #[clap(short = 'c', long = "config", default_value = "config.json")]
     pub config: String,
+    /// Log level.
+    #[clap(short = 'l', long = "level", default_value = "info")]
+    pub level: String,
+    /// Subcommand to run.
     #[clap(subcommand)]
     pub subcommand: Subcommand,
 }

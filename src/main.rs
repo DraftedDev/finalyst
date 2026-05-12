@@ -2,7 +2,7 @@ use std::io::{IsTerminal, stderr};
 
 use clap::Parser;
 use kdam::term;
-use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     cli::{Cli, Subcommand},
@@ -10,21 +10,12 @@ use crate::{
 };
 
 mod cli;
+mod finance;
 mod model;
 mod rss;
 mod utils;
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_ansi(true)
-        .with_file(false)
-        .with_line_number(false)
-        .with_thread_ids(false)
-        .with_thread_names(false)
-        .without_time()
-        .with_max_level(LevelFilter::INFO)
-        .init();
-
     let rt = tokio::runtime::Builder::new_current_thread()
         .max_blocking_threads(8)
         .worker_threads(2)
@@ -33,6 +24,26 @@ fn main() {
         .expect("Failed to build tokio runtime");
 
     let cli = Cli::parse();
+
+    tracing_subscriber::registry()
+        .with(
+            EnvFilter::new(&cli.level)
+                .add_directive("hyper=error".parse().unwrap())
+                .add_directive("reqwest=warn".parse().unwrap())
+                .add_directive("h2=error".parse().unwrap())
+                .add_directive("tower=error".parse().unwrap())
+                .add_directive("rustls=error".parse().unwrap()),
+        )
+        .with(
+            fmt::layer()
+                .with_ansi(true)
+                .with_file(false)
+                .with_line_number(false)
+                .with_thread_ids(false)
+                .with_thread_names(false)
+                .without_time(),
+        )
+        .init();
 
     term::init(stderr().is_terminal());
 

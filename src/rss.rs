@@ -4,7 +4,7 @@ use reqwest::Client;
 use rig_core::Embed;
 use serde::{Deserialize, Serialize};
 
-static CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
+static CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 pub async fn fetch(source: &str) -> Vec<FeedEntry> {
     let mut entries = Vec::new();
@@ -27,13 +27,13 @@ pub async fn fetch(source: &str) -> Vec<FeedEntry> {
             .unwrap_or_else(|| entry.published.expect("No published tag"));
 
         entries.push(FeedEntry {
-            title: title.clone(),
+            title,
             links: entry.links.into_iter().map(|l| l.href).collect(),
             content: entry.summary.map(|t| t.content).unwrap_or_else(|| {
                 entry
                     .content
                     .map(|c| c.body.expect("Failed to get content body"))
-                    .unwrap_or(title)
+                    .expect("No content given")
             }),
             timestamp: timestamp.to_rfc3339(),
             timestamp_unix: timestamp.timestamp() as u64,

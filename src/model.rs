@@ -19,6 +19,7 @@ use rig_qdrant::QdrantVectorStore;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    finance::quotes::QuotesTool,
     rss::{self, FeedEntry},
     utils::progress_bar,
 };
@@ -31,14 +32,8 @@ const ENTRY_DB_FILE: &str = "entry.db";
 const QDRANT_COLLECTION: &str = "embed-entries";
 const ENTRY_TABLE: TableDefinition<'static, String, String> = TableDefinition::new("entries");
 const DEFAULT_SOURCES: &[&str] = &[
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839135",
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
-    "https://thedefiant.io/api/feed",
-    "https://cryptopotato.com/feed/",
-    "https://www.forbes.com/innovation/feed",
-    "https://cepr.org/rss/vox-content",
-    "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
+    "https://www.economist.com/business/rss.xml",
+    "http://feeds.marketwatch.com/marketwatch/topstories/",
 ];
 
 pub struct Model {
@@ -76,6 +71,7 @@ impl Model {
             compression: Some(qdrant_client::config::CompressionEncoding::Gzip),
             check_compatibility: true,
             pool_size: 1,
+            custom_headers: Default::default(),
         })
         .expect("Failed to create Qdrant client");
 
@@ -129,6 +125,7 @@ impl Model {
                 config.max_points as usize,
                 QdrantVectorStore::new(vector_db.clone(), embedding.clone(), query_params.clone()),
             )
+            .tool(QuotesTool)
             .build();
 
         Self {
@@ -161,15 +158,12 @@ impl Model {
 
         tracing::info!("Deduplicating entries...");
         let old_len = entries.len();
-        entries = entries
-            .into_iter()
-            .filter(|entry| {
-                table
-                    .get(&entry.title)
-                    .expect("Failed to get entry from table")
-                    .is_none()
-            })
-            .collect();
+        entries.retain(|entry| {
+            table
+                .get(&entry.title)
+                .expect("Failed to get entry from table")
+                .is_none()
+        });
 
         if let Some(limit) = limit {
             tracing::info!("Truncating entries to {}...", limit);
@@ -212,6 +206,7 @@ impl Model {
                 .insert(entry.title.clone(), entry.display(true))
                 .expect("Failed to insert entry");
         }
+
         drop(table);
         write_tx
             .commit()
@@ -291,6 +286,8 @@ impl Model {
     }
 
     pub async fn analyze(&self) -> String {
+        crate::finance::try_init();
+
         let read_tx = self
             .entry_db
             .begin_read()
@@ -316,7 +313,7 @@ impl Model {
             .map(|res| res.expect("Failed to get entry"))
             .collect::<Vec<_>>();
 
-        entries.sort_by(|a, b| b.1.value().cmp(&a.1.value()));
+        entries.sort_unstable_by_key(|b| std::cmp::Reverse(b.1.value()));
         entries.truncate(self.config.use_latest_entries);
 
         if entries.len() < self.config.use_latest_entries {
@@ -330,14 +327,14 @@ impl Model {
         let entries = entries.into_iter().map(|e| e.1.value()).collect::<Vec<_>>();
         let feed = entries.join("\n\n");
 
+        // Drop database handles for performance
+        drop((table, read_tx));
+
         tracing::info!("Launching analyzer...");
-        let result = self
-            .analyst_agent
+        self.analyst_agent
             .prompt(format!("The latest RSS feed entries are:\n\n{}", feed))
             .await
-            .expect("Failed to prompt agent");
-
-        result
+            .expect("Failed to prompt agent")
     }
 
     pub async fn reset(&self) {
@@ -399,13 +396,13 @@ pub struct ModelConfig {
 impl ModelConfig {
     pub fn load(path: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
-        if fs::exists(&path).expect("Failed to check config existence") {
-            toml::from_slice(&fs::read(path).expect("Failed to read config file"))
+        if fs::exists(path).expect("Failed to check config existence") {
+            serde_json::from_slice(&fs::read(path).expect("Failed to read config file"))
                 .expect("Failed to parse config file")
         } else {
             let def = Self::default();
 
-            fs::write(path, toml::to_string(&def).unwrap())
+            fs::write(path, serde_json::to_string_pretty(&def).unwrap())
                 .expect("Failed to write default config file");
 
             def
@@ -418,7 +415,7 @@ impl Default for ModelConfig {
         Self {
             curl: "http://localhost:11434".to_string(),
 
-            rank_agent: "qwen2.5:1.5b".to_string(),
+            rank_agent: "qwen3.5:0.8b".to_string(),
             rank_preamble: r#"
 You are a high-speed financial data filter. Your sole purpose is to evaluate RSS news entries for market-moving potential.
 
@@ -435,7 +432,7 @@ Return ONLY a single integer between 0 and 3. Do not provide explanations, title
             rank_max_tokens: 10,
             rank_retries: 3,
 
-            simplify_agent: "phi4-mini:3.8b".to_string(),
+            simplify_agent: "gemma3:1b".to_string(),
             simplify_preamble: r#"
 "You are a professional financial editor. Your task is to extract the core signal from messy RSS news text.
 Simplify the provided text to a clean, concise summary.
@@ -451,25 +448,26 @@ RULES:
             simplify_temperature: 0.3,
             simplify_max_tokens: 200,
 
-            analyst_agent: "deepseek-r1:14b".to_string(),
+            analyst_agent: "qwen3.5:4b".to_string(),
             analyst_preamble: r#"
 You are a financial analyst with access to a vector store of past RSS feed entries.
 Prompted with the latest entries and the context of the past ones,
-you will predict moves of stock symbols mentioned and output a prediction,
-that is either 'Up', 'Down', or 'Neutral'.
+Predict the move of stock symbols using the format '<SYMBOL>: <UP/DOWN/NEUTRAL> <TIME-FRAME>'.
 Every RSS entry contains a 'rank' field indicating its relevance to the market
 (1: general, 2: sector-specific, 3: definitive).
+You also have access to a 'finance-api' tool that provides you with up-to-date financial data
+and can even calculate indicators like EMA and RSI.
 If you cannot make a prediction, due to lack of relevant data, output 'Insufficient data'.
                 "#
             .to_string(),
-            analyst_temperature: 0.5,
-            analyst_max_tokens: 1500,
+            analyst_temperature: 0.15,
+            analyst_max_tokens: 2000,
 
-            embedding: "bge-m3".to_string(),
+            embedding: "bge-m3:567m".to_string(),
             embedding_chunks: 10,
             ndims: 1024,
             qdrant: "http://127.0.0.1:6334".to_string(),
-            max_points: 15,
+            max_points: 25,
             use_latest_entries: 5,
             sources: DEFAULT_SOURCES.iter().map(|src| src.to_string()).collect(),
         }
