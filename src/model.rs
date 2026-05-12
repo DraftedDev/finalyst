@@ -34,6 +34,9 @@ const ENTRY_TABLE: TableDefinition<'static, String, String> = TableDefinition::n
 const DEFAULT_SOURCES: &[&str] = &[
     "https://www.economist.com/business/rss.xml",
     "http://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://techcrunch.com/feed/",
+    "https://thedefiant.io/api/feed",
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
 ];
 
 pub struct Model {
@@ -440,8 +443,8 @@ Simplify the provided text to a clean, concise summary.
 RULES:
 - Remove all marketing fluff, boilerplate text, and 'click for more' links.
 - Retain all specific numbers, percentages, and ticker symbols.
-- Summarize the event in a few bullet points.
-- Always use the same format (- <point>) for each bullet point.
+- Summarize the event in a few bullet points or sentences.
+- Always use the same format ('- <point><newline>') for each bullet point.
 - If a specific company is the focus, put the TICKER symbol at the start.
 - Output ONLY the clean summary. No conversational filler."
                 "#.to_string(),
@@ -452,7 +455,9 @@ RULES:
             analyst_preamble: r#"
 You are a financial analyst with access to a vector store of past RSS feed entries.
 Prompted with the latest entries and the context of the past ones,
-Predict the move of stock symbols using the format '<SYMBOL>: <UP/DOWN/NEUTRAL> <TIME-FRAME>'.
+Predict the move of stock symbols using the format '<TICKER>: <UP/DOWN/NEUTRAL> <TIME-FRAME>',
+where <TICKER> is the ticker, <UP/DOWN/NEUTRAL> is the predicted move,
+and <TIME-FRAME> is the time period in '<day>/<month>/<year>'.
 Every RSS entry contains a 'rank' field indicating its relevance to the market
 (1: general, 2: sector-specific, 3: definitive).
 You also have access to a 'finance-api' tool that provides you with up-to-date financial data
