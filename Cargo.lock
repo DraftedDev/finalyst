@@ -677,6 +677,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "feed-rs",
+ "futures",
  "kdam",
  "qdrant-client",
  "redb",

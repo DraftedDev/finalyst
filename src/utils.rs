@@ -1,11 +1,17 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
-use kdam::{Bar, Column, RichProgress, Spinner};
+use futures::StreamExt;
+use kdam::{Bar, BarExt, Column, RichProgress, Spinner};
 
-pub fn progress_bar(len: usize, label: impl Display) -> RichProgress {
-    RichProgress::new(
-        Bar::new(len),
-        vec![
+#[derive(Clone)]
+pub struct Progress(Arc<Mutex<RichProgress>>);
+
+impl Progress {
+    pub fn new(len: usize, label: impl Display) -> Self {
+        let mut content = vec![
             Column::Text(" ".to_string()),
             Column::Spinner(Spinner::new(
                 &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
@@ -14,11 +20,51 @@ pub fn progress_bar(len: usize, label: impl Display) -> RichProgress {
             )),
             Column::Text(format!("[bold blue] {label}")),
             Column::Animation,
-            Column::Percentage(0),
             Column::Text("•".to_string()),
-            Column::CountTotal,
-            Column::Text("•".to_string()),
-            Column::RemainingTime,
-        ],
-    )
+        ];
+
+        if len > 0 {
+            content.extend([
+                Column::Percentage(0),
+                Column::Text("•".to_string()),
+                Column::CountTotal,
+                Column::Text("•".to_string()),
+                Column::RemainingTime,
+            ]);
+        }
+
+        Self(Arc::new(Mutex::new(RichProgress::new(
+            Bar::new(len),
+            content,
+        ))))
+    }
+
+    pub fn inc(&self) {
+        let mut progress = self.0.lock().expect("Failed to lock progress bar");
+        progress.update(1).expect("Failed to update progress bar");
+    }
+
+    pub fn finish(self, label: impl Display) {
+        self.0
+            .lock()
+            .expect("Failed to lock progress bar")
+            .clear()
+            .expect("Failed to clear progress bar");
+        tracing::info!("{label}");
+    }
+}
+
+pub async fn join_chunked<F, Fut, I, O>(
+    iter: impl IntoIterator<Item = I>,
+    chunk_size: usize,
+    f: F,
+) -> Vec<O>
+where
+    F: Fn(I) -> Fut,
+    Fut: Future<Output = O>,
+{
+    futures::stream::iter(iter.into_iter().map(|i| f(i)))
+        .buffered(chunk_size)
+        .collect()
+        .await
 }

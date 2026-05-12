@@ -1,6 +1,5 @@
 use std::{fs, path::Path, time::Duration};
 
-use kdam::BarExt;
 use qdrant_client::{
     Qdrant,
     config::QdrantConfig,
@@ -21,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     finance::quotes::QuotesTool,
     rss::{self, FeedEntry},
-    utils::progress_bar,
+    utils::{Progress, join_chunked},
 };
 
 type OllamaEmbeddingModel = ollama::EmbeddingModel;
@@ -180,25 +179,29 @@ impl Model {
         );
 
         tracing::info!("Ranking entries...");
-        let mut progress = progress_bar(entries.len(), "Ranking");
-        for entry in &mut entries {
-            let rank = self.rank_entry(entry).await;
+        let progress = Progress::new(entries.len(), "Ranking");
+        entries = join_chunked(entries, self.config.parallel_chunks, |mut entry| async {
+            let rank = self.rank_entry(&entry).await;
             entry.rank = rank;
-            progress.update(1).expect("Failed to update progress bar");
-        }
-        eprintln!();
+            progress.inc();
+            entry
+        })
+        .await;
+        progress.finish("Finished ranking!");
 
         tracing::info!("Filtering out irrelevant entries...");
         entries.retain(|e| e.rank > 0);
 
         tracing::info!("Simplifying entries...");
-        let mut progress = progress_bar(entries.len(), "Simplifying");
-        for entry in &mut entries {
-            let simplified = self.simplify_entry(entry).await;
+        let progress = Progress::new(entries.len(), "Simplifying");
+        entries = join_chunked(entries, self.config.parallel_chunks, |mut entry| async {
+            let simplified = self.simplify_entry(&entry).await;
             entry.content = simplified;
-            progress.update(1).expect("Failed to update progress bar");
-        }
-        eprintln!();
+            progress.inc();
+            entry
+        })
+        .await;
+        progress.finish("Finished simplifying!");
 
         tracing::info!(
             "Inserting entries {} into the entry database...",
@@ -215,18 +218,11 @@ impl Model {
             .commit()
             .expect("Failed to commit entry database transaction");
 
-        let chunks = entries.chunks(self.config.embedding_chunks);
-
-        tracing::info!(
-            "Embedding {} chunks of {} entries...",
-            chunks.len(),
-            entries.len()
-        );
-
-        let mut progress = progress_bar(chunks.len(), "Embedding");
-        for chunk in chunks {
+        tracing::info!("Embedding {} entries...", entries.len());
+        let progress = Progress::new(entries.len(), "Embedding");
+        join_chunked(entries, self.config.parallel_chunks, |entry| async {
             let embeddings = EmbeddingsBuilder::new(self.embedding.clone())
-                .documents(chunk)
+                .document(entry)
                 .expect("Failed to embed entries")
                 .build()
                 .await
@@ -237,9 +233,10 @@ impl Model {
                 .await
                 .expect("Failed to insert ");
 
-            progress.update(1).expect("Failed to update progress bar");
-        }
-        eprintln!();
+            progress.inc();
+        })
+        .await;
+        progress.finish("Finished embedding!");
     }
 
     pub async fn rank_entry(&self, entry: &FeedEntry) -> u8 {
@@ -333,11 +330,27 @@ impl Model {
         // Drop database handles for performance
         drop((table, read_tx));
 
+        let progress = Progress::new(0, "Analyzing");
+
+        let progress2 = progress.clone();
+        let progress_handle = tokio::task::spawn(async move {
+            loop {
+                progress2.inc();
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
+
         tracing::info!("Launching analyzer...");
-        self.analyst_agent
+        let result = self
+            .analyst_agent
             .prompt(format!("The latest RSS feed entries are:\n\n{}", feed))
             .await
-            .expect("Failed to prompt agent")
+            .expect("Failed to prompt agent");
+
+        progress.finish("Analyzing");
+        progress_handle.abort();
+
+        result
     }
 
     pub async fn reset(&self) {
@@ -386,12 +399,12 @@ pub struct ModelConfig {
     pub analyst_max_tokens: u64,
 
     pub embedding: String,
-    pub embedding_chunks: usize,
     pub ndims: usize,
     pub qdrant: String,
 
     pub max_points: u64,
     pub use_latest_entries: usize,
+    pub parallel_chunks: usize,
 
     pub sources: Vec<String>,
 }
@@ -469,11 +482,12 @@ If you cannot make a prediction, due to lack of relevant data, output 'Insuffici
             analyst_max_tokens: 2000,
 
             embedding: "bge-m3:567m".to_string(),
-            embedding_chunks: 10,
             ndims: 1024,
             qdrant: "http://127.0.0.1:6334".to_string(),
             max_points: 25,
             use_latest_entries: 5,
+            parallel_chunks: 4,
+
             sources: DEFAULT_SOURCES.iter().map(|src| src.to_string()).collect(),
         }
     }

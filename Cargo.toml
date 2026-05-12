@@ -21,3 +21,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 kdam = { version = "0.6.4", features = ["rich", "spinner"] }
 yahoo_finance_api = "4.1.0"
 yata = { version = "0.7.0", default-features = false }
+futures = { version = "0.3.32", default-features = false, features = [
+    "std",
+    "async-await",
+] }
