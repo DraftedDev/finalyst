@@ -19,12 +19,12 @@ impl Progress {
                 1.0,
             )),
             Column::Text(format!("[bold blue] {label}")),
-            Column::Animation,
-            Column::Text("•".to_string()),
         ];
 
         if len > 0 {
             content.extend([
+                Column::Animation,
+                Column::Text("•".to_string()),
                 Column::Percentage(0),
                 Column::Text("•".to_string()),
                 Column::CountTotal,
