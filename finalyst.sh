@@ -1,10 +1,10 @@
 #!/usr/bin/sh
 
-set BINARY "./target/release/finalyst"
+BINARY="./target/release/finalyst"
 
-if not test -f $BINARY
+if [ ! -f "$BINARY" ]; then
     echo "Release binary not found. Please run 'build-release.sh' first."
     exit 1
-end
+fi
 
 ./target/release/finalyst "$@"
