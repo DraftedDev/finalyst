@@ -6,10 +6,12 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 use crate::{
     cli::{Cli, Subcommand},
-    model::{Model, ModelConfig},
+    config::Config,
+    model::Model,
 };
 
 mod cli;
+mod config;
 mod finance;
 mod model;
 mod rss;
@@ -48,8 +50,8 @@ fn main() {
     term::init(stderr().is_terminal());
 
     rt.block_on(async {
-        tracing::info!("Loading model from config at '{}'...", cli.config);
-        let model = Model::new(ModelConfig::load(cli.config)).await;
+        tracing::info!("Loading config file at '{}'...", cli.config);
+        let model = Model::new(Config::load(cli.config)).await;
 
         match cli.subcommand.clone() {
             Subcommand::Launch(args) => args.run(model).await,
