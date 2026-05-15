@@ -63,7 +63,7 @@ where
     F: Fn(I) -> Fut,
     Fut: Future<Output = O>,
 {
-    futures::stream::iter(iter.into_iter().map(|i| f(i)))
+    futures::stream::iter(iter.into_iter().map(f))
         .buffered(chunk_size)
         .collect()
         .await

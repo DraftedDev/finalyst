@@ -104,7 +104,7 @@ impl Config {
     pub fn read_rank_preamble(&self) -> String {
         fs::read_to_string(&self.rank_preamble)
             .expect("Failed to read rank preamble")
-            .replace(|c: char| c == '\t' || c == '\n', " ")
+            .replace(['\t', '\n'], " ")
             .trim()
             .to_string()
     }
@@ -112,7 +112,7 @@ impl Config {
     pub fn read_simplify_preamble(&self) -> String {
         fs::read_to_string(&self.simplify_preamble)
             .expect("Failed to read simplify preamble")
-            .replace(|c: char| c == '\t' || c == '\n', " ")
+            .replace(['\t', '\n'], " ")
             .trim()
             .to_string()
     }
@@ -120,7 +120,7 @@ impl Config {
     pub fn read_analyst_preamble(&self) -> String {
         fs::read_to_string(&self.analyst_preamble)
             .expect("Failed to read analyst preamble")
-            .replace(|c: char| c == '\t' || c == '\n', " ")
+            .replace(['\t', '\n'], " ")
             .trim()
             .to_string()
     }
