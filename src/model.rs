@@ -160,6 +160,10 @@ impl Model {
                 .is_none()
         });
 
+        // Sort entries in descending order by timestamp_unix
+        tracing::info!("Sorting entries...");
+        entries.sort_unstable_by(|a, b| b.timestamp_unix.cmp(&a.timestamp_unix));
+
         if let Some(limit) = limit {
             tracing::info!("Truncating entries to {}...", limit);
             entries.truncate(limit);
