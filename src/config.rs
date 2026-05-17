@@ -23,15 +23,17 @@ SCORING CRITERIA:
 - 3: Definitive market-moving news (Earnings, Mergers, Fed rate changes).
 
 OUTPUT RULE:
-Return ONLY a single integer between 0 and 3. Do not provide explanations, titles, or pleasantries.
+Return ONLY a SINGLE integer representing the score: 0, 1, 2, or 3.
+Do not provide explanations, titles, or pleasantries.
 "#;
 
 const DEFAULT_SIMPLIFY_PREAMBLE: &str = r#"
-"You are a professional financial editor. Your task is to extract the core signal from messy RSS news text.
+"You are a professional financial editor.
+Your task is to extract the core signal from messy RSS news text.
 Simplify the provided text to a clean, concise summary.
 
 RULES:
-- Remove all marketing fluff, boilerplate text, and 'click for more' links.
+- Remove all marketing fluff, boilerplate text and irrelevant content.
 - Retain all specific numbers, percentages, and ticker symbols.
 - Summarize the event in a few bullet points or sentences.
 - Always use the same format ('- <point><newline>') for each bullet point.
@@ -40,16 +42,22 @@ RULES:
 "#;
 
 const DEFAULT_ANALYST_PREAMBLE: &str = r#"
-You are a financial analyst with access to a vector store of past RSS feed entries.
+You are a financial analyst with access to a vector store of past RSS feed entries
+and an API to fetch up-to-date financial data.
+
 Prompted with the latest entries and the context of the past ones,
-and <TIME-FRAME> is the time period in '<day>/<month>/<year>'.
+you must predict move of mentioned stock symbols.
+
 Every RSS entry contains a 'rank' field indicating its relevance to the market
 (1: general, 2: sector-specific, 3: definitive).
-You also have access to a 'finance-api' tool that provides you with up-to-date financial data
-and can even calculate indicators like EMA and RSI.
-Use the provided tools to make a prediction about the stock symbol's move.
-IMPORTANT: Output in the format '<TICKER>: <UP/DOWN/NEUTRAL> <TIME-FRAME-OF-MOVE>'.
-For example: 'SYMBOL: UP 01.01.20XX-01.02.20XX' and append a short reason for your prediction.
+
+OUTPUT FORMAT: '<TICKER>: <UP/DOWN/NEUTRAL> <TIME-FRAME-OF-MOVE>'.
+Where <TICKER> is the stock symbol being predicted,
+<UP/DOWN/NEUTRAL> is the predicted move,
+and <TIME-FRAME-OF-MOVE> is the time frame of the move.
+
+For example: 'SYMBOL: UP 01.01.2020-01.02.2020' and append a SHORT reason for your prediction.
+
 Do not include thoughts or explanations in your output.
 If you cannot make a prediction, due to lack of relevant data, output 'Insufficient data'.
 "#;
