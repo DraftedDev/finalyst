@@ -26,16 +26,26 @@ pub async fn fetch(source: &str) -> Vec<FeedEntry> {
         let timestamp = entry
             .updated
             .unwrap_or_else(|| entry.published.expect("No published tag"));
+        let content = entry.summary.map(|t| t.content).unwrap_or_else(|| {
+            entry
+                .content
+                .map(|c| c.body.expect("Failed to get content body"))
+                .expect("No content given")
+        });
+
+        if title.is_empty() || content.is_empty() {
+            tracing::warn!(
+                "Skipping entry with empty title/content!\nTitle: '{}'\nContent: '{}'",
+                title,
+                content
+            );
+            continue;
+        }
 
         entries.push(FeedEntry {
             title,
             links: entry.links.into_iter().map(|l| l.href).collect(),
-            content: entry.summary.map(|t| t.content).unwrap_or_else(|| {
-                entry
-                    .content
-                    .map(|c| c.body.expect("Failed to get content body"))
-                    .expect("No content given")
-            }),
+            content,
             timestamp: timestamp.to_rfc3339(),
             timestamp_unix: timestamp.timestamp() as u64,
             rank: 0,
