@@ -26,10 +26,11 @@ fn main() {
 
     let indicatif_tracing = tracing_indicatif::IndicatifLayer::new();
 
+    let level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
     tracing_subscriber::registry()
         .with(
             EnvFilter::new("warn")
-                .add_directive(format!("finalyst={}", cli.level.as_str()).parse().unwrap()),
+                .add_directive(format!("finalyst={}", level.as_str()).parse().unwrap()),
         )
         .with(
             fmt::layer()
@@ -44,6 +45,8 @@ fn main() {
         )
         .with(indicatif_tracing)
         .init();
+
+    tracing::info!("Using log level: {}", level);
 
     rt.block_on(async {
         tracing::info!("Loading config file at '{}'...", cli.config);

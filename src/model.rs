@@ -187,6 +187,8 @@ impl Model {
 
     #[tracing::instrument(skip(self, entry))]
     async fn process(&self, i: usize, mut entry: FeedEntry) {
+        tracing::debug!("Processing entry: {entry:?}");
+
         tracing::info!("Ranking entry...");
         entry.rank = self.rank_entry(&entry).await;
         tracing::info!("Ranked entry with rank {}", entry.rank);
