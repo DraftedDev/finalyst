@@ -191,6 +191,12 @@ impl Model {
         entry.rank = self.rank_entry(&entry).await;
         tracing::info!("Ranked entry with rank {}", entry.rank);
 
+        if entry.rank == 0 {
+            tracing::info!("Skipping irrelevant entry");
+            tracing::debug!("Irrelevant entry: {}", entry.title);
+            return;
+        }
+
         tracing::info!("Simplifying entry...");
         entry.content = self.simplify_entry(&entry).await;
         tracing::debug!("Simplified entry with final content: {}", entry.content);
