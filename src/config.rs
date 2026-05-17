@@ -80,7 +80,7 @@ pub struct Config {
 
     pub max_points: u64,
     pub use_latest_entries: usize,
-    pub parallel_chunks: usize,
+    pub process_chunks: usize,
 
     pub sources: Vec<String>,
 }
@@ -162,7 +162,7 @@ impl Default for Config {
             qdrant: "http://127.0.0.1:6334".to_string(),
             max_points: 25,
             use_latest_entries: 5,
-            parallel_chunks: 4,
+            process_chunks: 4,
 
             sources: DEFAULT_SOURCES.iter().map(|src| src.to_string()).collect(),
         }

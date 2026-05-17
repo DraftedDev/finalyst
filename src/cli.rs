@@ -21,8 +21,8 @@ pub struct Cli {
 /// Subcommands for the Finalyst Market Analysis Tool.
 #[derive(Clone, Debug, Parser)]
 pub enum Subcommand {
-    /// Launch the analysis tool.
-    Launch(LaunchArgs),
+    /// Analyze the market data.
+    Analyze(AnalyzeArgs),
     /// Reset the database.
     Reset(ResetArgs),
     /// Collect and process RSS feeds without running the analysis.
@@ -31,9 +31,9 @@ pub enum Subcommand {
 
 /// Arguments for the `launch` subcommand.
 #[derive(Clone, Debug, Parser)]
-pub struct LaunchArgs {}
+pub struct AnalyzeArgs {}
 
-impl LaunchArgs {
+impl AnalyzeArgs {
     pub async fn run(self, model: Model) {
         let result = model.analyze().await;
         println!("--------------------[ RESULT ]--------------------");
@@ -69,6 +69,6 @@ pub struct CollectArgs {
 impl CollectArgs {
     pub async fn run(self, model: Model) {
         tracing::info!("Collecting RSS feeds...");
-        model.fetch(self.limit).await;
+        model.collect(self.limit.unwrap_or(usize::MAX)).await;
     }
 }

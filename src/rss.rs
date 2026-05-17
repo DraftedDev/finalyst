@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use redb::TypeName;
 use reqwest::Client;
 use rig_core::Embed;
 use serde::{Deserialize, Serialize};
@@ -81,5 +82,33 @@ Timestamp: {}"#,
         } else {
             result
         }
+    }
+}
+
+impl redb::Value for FeedEntry {
+    type SelfType<'a> = FeedEntry;
+
+    type AsBytes<'a> = Vec<u8>;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        serde_json::from_slice(data).expect("Failed to decode feed entry")
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'b,
+    {
+        serde_json::to_vec(value).expect("Failed to encode feed entry")
+    }
+
+    fn type_name() -> redb::TypeName {
+        TypeName::new("FeedEntry")
     }
 }

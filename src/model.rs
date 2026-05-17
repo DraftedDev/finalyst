@@ -15,12 +15,13 @@ use rig_core::{
     vector_store::InsertDocuments,
 };
 use rig_qdrant::QdrantVectorStore;
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
     config::Config,
     finance::quotes::QuotesTool,
     rss::{self, FeedEntry},
-    utils::{Progress, join_chunked},
+    utils::{join_chunked, with_progress},
 };
 
 type OllamaEmbeddingModel = ollama::EmbeddingModel;
@@ -29,7 +30,7 @@ type OllamaCompletionModel = ollama::CompletionModel;
 const ENTRY_DB_CACHE_SIZE: usize = 1024 * 1024 * 5; // 5 MiB
 const ENTRY_DB_FILE: &str = "entry.db";
 const QDRANT_COLLECTION: &str = "embed-entries";
-const ENTRY_TABLE: TableDefinition<'static, String, String> = TableDefinition::new("entries");
+const ENTRY_TABLE: TableDefinition<'static, String, FeedEntry> = TableDefinition::new("entries");
 
 pub struct Model {
     config: Config,
@@ -135,13 +136,64 @@ impl Model {
         }
     }
 
-    pub async fn fetch(&self, limit: Option<usize>) {
-        let mut entries = Vec::with_capacity(self.config.sources.len());
+    pub async fn collect(&self, limit: usize) {
+        let mut entries = self.fetch().await;
 
-        for source in &self.config.sources {
-            tracing::info!("Fetching RSS feed from '{}'...", source);
-            entries.extend(rss::fetch(source).await);
-        }
+        // TODO: don't use write here
+        let write_tx = self
+            .entry_db
+            .begin_write()
+            .expect("Failed to begin entry write");
+        let table = write_tx
+            .open_table(ENTRY_TABLE)
+            .expect("Failed to open entry table");
+
+        tracing::info!("Deduplicating...");
+        entries.retain(|e| !table.get(&e.title).expect("Failed to get entry").is_some());
+
+        drop(table);
+        write_tx.commit().expect("Failed to commit entry write");
+
+        // Sort entries by timestamp in descending order
+        tracing::info!("Sorting entries...");
+        entries.sort_by(|a, b| b.timestamp_unix.cmp(&a.timestamp_unix));
+
+        tracing::info!("Truncating entries...");
+        entries.truncate(limit);
+
+        tracing::info!(
+            "Processing {} entries with {} chunks...",
+            entries.len(),
+            self.config.process_chunks,
+        );
+
+        with_progress("Processing", entries.len() as u64, |span| async move {
+            join_chunked(
+                entries.into_iter().enumerate(),
+                self.config.process_chunks,
+                |(idx, e)| {
+                    let span = span.clone();
+                    async move {
+                        self.process(idx, e).await;
+
+                        span.pb_inc(1);
+                    }
+                },
+            )
+            .await
+        })
+        .await;
+    }
+
+    #[tracing::instrument(skip(self, entry))]
+    async fn process(&self, i: usize, mut entry: FeedEntry) {
+        tracing::info!("Ranking entry...");
+        entry.rank = self.rank_entry(&entry).await;
+        tracing::info!("Ranked entry with rank {}", entry.rank);
+
+        tracing::info!("Simplifying entry...");
+        entry.content = self.simplify_entry(&entry).await;
+        tracing::debug!("Simplified entry with final content: {}", entry.content);
 
         let write_tx = self
             .entry_db
@@ -151,92 +203,38 @@ impl Model {
             .open_table(ENTRY_TABLE)
             .expect("Failed to open entry table");
 
-        tracing::info!("Deduplicating entries...");
-        let old_len = entries.len();
-        entries.retain(|entry| {
-            table
-                .get(&entry.title)
-                .expect("Failed to get entry from table")
-                .is_none()
-        });
+        tracing::info!("Embedding entry...");
+        let docs = EmbeddingsBuilder::new(self.embedding.clone())
+            .document(entry.clone())
+            .expect("Failed to embed entry document")
+            .build()
+            .await
+            .expect("Failed to build embedding");
 
-        // Sort entries in descending order by timestamp_unix
-        tracing::info!("Sorting entries...");
-        entries.sort_unstable_by_key(|b| std::cmp::Reverse(b.timestamp_unix));
+        tracing::info!("Updating vector store...");
+        self.vector_store
+            .insert_documents(docs)
+            .await
+            .expect("Failed to insert embedded document");
 
-        if let Some(limit) = limit {
-            tracing::info!("Truncating entries to {}...", limit);
-            entries.truncate(limit);
-        }
-
-        tracing::info!(
-            "Using {} out of {} total entries...",
-            entries.len(),
-            old_len
-        );
-
-        tracing::info!("Ranking entries...");
-        let progress = Progress::new(entries.len(), "Ranking");
-        entries = join_chunked(entries, self.config.parallel_chunks, |mut entry| async {
-            let rank = self.rank_entry(&entry).await;
-            entry.rank = rank;
-            progress.inc();
-            entry
-        })
-        .await;
-        progress.finish("Finished ranking!");
-
-        tracing::info!("Filtering out irrelevant entries...");
-        entries.retain(|e| e.rank > 0);
-
-        tracing::info!("Simplifying entries...");
-        let progress = Progress::new(entries.len(), "Simplifying");
-        entries = join_chunked(entries, self.config.parallel_chunks, |mut entry| async {
-            let simplified = self.simplify_entry(&entry).await;
-            entry.content = simplified;
-            progress.inc();
-            entry
-        })
-        .await;
-        progress.finish("Finished simplifying!");
-
-        tracing::info!(
-            "Inserting entries {} into the entry database...",
-            entries.len()
-        );
-        for entry in &entries {
-            table
-                .insert(entry.title.clone(), entry.display(true))
-                .expect("Failed to insert entry");
-        }
-
-        drop(table);
-        write_tx
-            .commit()
-            .expect("Failed to commit entry database transaction");
-
-        tracing::info!("Embedding {} entries...", entries.len());
-        let progress = Progress::new(entries.len(), "Embedding");
-        join_chunked(entries, self.config.parallel_chunks, |entry| async {
-            let embeddings = EmbeddingsBuilder::new(self.embedding.clone())
-                .document(entry)
-                .expect("Failed to embed entries")
-                .build()
-                .await
-                .expect("Failed to build embeddings");
-
-            self.vector_store
-                .insert_documents(embeddings)
-                .await
-                .expect("Failed to insert ");
-
-            progress.inc();
-        })
-        .await;
-        progress.finish("Finished embedding!");
+        tracing::info!("Updating entry database...");
+        table
+            .insert(entry.title.clone(), entry)
+            .expect("Failed to insert entry into database");
     }
 
-    pub async fn rank_entry(&self, entry: &FeedEntry) -> u8 {
+    async fn fetch(&self) -> Vec<FeedEntry> {
+        let mut entries = Vec::with_capacity(self.config.sources.len());
+
+        for source in &self.config.sources {
+            tracing::info!("Fetching RSS feed from '{}'...", source);
+            entries.extend(rss::fetch(source).await);
+        }
+
+        entries
+    }
+
+    async fn rank_entry(&self, entry: &FeedEntry) -> u8 {
         let mut rank = None;
         let mut retries = 0;
 
@@ -276,7 +274,7 @@ impl Model {
         })
     }
 
-    pub async fn simplify_entry(&self, entry: &FeedEntry) -> String {
+    async fn simplify_entry(&self, entry: &FeedEntry) -> String {
         self.simplify_agent
             .prompt(&entry.content)
             .await
@@ -304,14 +302,16 @@ impl Model {
             .open_table(ENTRY_TABLE)
             .expect("Failed to open entry table");
 
-        tracing::info!("Collecting entries from database...");
+        tracing::info!("Collecting entries...");
         let mut entries = table
             .iter()
             .expect("Failed to get entry keys")
             .map(|res| res.expect("Failed to get entry"))
             .collect::<Vec<_>>();
 
-        entries.sort_unstable_by_key(|b| std::cmp::Reverse(b.1.value()));
+        tracing::info!("Sorting entries...");
+        entries
+            .sort_unstable_by(|a, b| b.1.value().timestamp_unix.cmp(&a.1.value().timestamp_unix));
         entries.truncate(self.config.use_latest_entries);
 
         if entries.len() < self.config.use_latest_entries {
@@ -323,30 +323,26 @@ impl Model {
         }
 
         let entries = entries.into_iter().map(|e| e.1.value()).collect::<Vec<_>>();
-        let feed = entries.join("\n\n");
+        let feed = entries
+            .into_iter()
+            .map(|e| e.display(true))
+            .collect::<Vec<String>>()
+            .join("\n\n");
 
         // Drop database handles for performance
         drop((table, read_tx));
 
-        let progress = Progress::new(0, "Analyzing");
+        tracing::info!("Running analyst agent...");
 
-        let progress2 = progress.clone();
-        let progress_handle = tokio::task::spawn(async move {
-            loop {
-                progress2.inc();
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        });
+        let result = with_progress("Analyzing", 0, |_| async {
+            self.analyst_agent
+                .prompt(format!("The latest RSS feed entries are:\n\n{}", feed))
+                .await
+                .expect("Failed to prompt agent")
+        })
+        .await;
 
-        tracing::info!("Launching analyzer...");
-        let result = self
-            .analyst_agent
-            .prompt(format!("The latest RSS feed entries are:\n\n{}", feed))
-            .await
-            .expect("Failed to prompt agent");
-
-        progress.finish("Analyzing");
-        progress_handle.abort();
+        tracing::info!("Finished analyzing.");
 
         result
     }

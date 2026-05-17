@@ -1,57 +1,35 @@
-use std::{
-    fmt::Display,
-    sync::{Arc, Mutex},
-};
-
 use futures::StreamExt;
-use kdam::{Bar, BarExt, Column, RichProgress, Spinner};
+use indicatif::ProgressStyle;
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-#[derive(Clone)]
-pub struct Progress(Arc<Mutex<RichProgress>>);
+pub async fn with_progress<Fut: Future<Output = R>, R>(
+    msg: &str,
+    len: u64,
+    f: impl FnOnce(tracing::Span) -> Fut,
+) -> R {
+    let span = tracing::span!(tracing::Level::INFO, "progress");
+    span.pb_set_message(msg);
+    span.pb_set_length(len);
 
-impl Progress {
-    pub fn new(len: usize, label: impl Display) -> Self {
-        let mut content = vec![
-            Column::Text(" ".to_string()),
-            Column::Spinner(Spinner::new(
-                &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-                80.0,
-                1.0,
-            )),
-            Column::Text(format!("[bold blue] {label}")),
-        ];
+    let template = if len == 0 {
+        "  [{spinner:.green}] {msg} │ {elapsed:<4}"
+    } else {
+        "  [{spinner:.green}] {msg} {wide_bar:.green/red} {pos}/{len} ({percent}%) │ {elapsed:<4}"
+    };
 
-        if len > 0 {
-            content.extend([
-                Column::Animation,
-                Column::Text("•".to_string()),
-                Column::Percentage(0),
-                Column::Text("•".to_string()),
-                Column::CountTotal,
-                Column::Text("•".to_string()),
-                Column::RemainingTime,
-            ]);
-        }
+    span.pb_set_style(
+        &ProgressStyle::with_template(template)
+            .unwrap()
+            .progress_chars("━━━"),
+    );
 
-        Self(Arc::new(Mutex::new(RichProgress::new(
-            Bar::new(len),
-            content,
-        ))))
-    }
+    let span2 = span.clone();
+    let enter = span2.enter();
+    let result = f(span).await;
 
-    pub fn inc(&self) {
-        let mut progress = self.0.lock().expect("Failed to lock progress bar");
-        progress.update(1).expect("Failed to update progress bar");
-    }
+    drop(enter);
 
-    pub fn finish(self, label: impl Display) {
-        self.0
-            .lock()
-            .expect("Failed to lock progress bar")
-            .clear()
-            .expect("Failed to clear progress bar");
-        tracing::info!("{label}");
-    }
+    result
 }
 
 pub async fn join_chunked<F, Fut, I, O>(

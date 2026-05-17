@@ -1,0 +1,29 @@
+{
+  "curl": "http://localhost:11434",
+  "rank_agent": "qwen3.5:0.8b",
+  "rank_preamble": "rank-preamble.txt",
+  "rank_temperature": 0.0,
+  "rank_max_tokens": 10,
+  "rank_retries": 3,
+  "simplify_agent": "gemma3:1b",
+  "simplify_preamble": "simplify-preamble.txt",
+  "simplify_temperature": 0.3,
+  "simplify_max_tokens": 200,
+  "analyst_agent": "qwen2.5:3b",
+  "analyst_preamble": "analyze-preamble.txt",
+  "analyst_temperature": 0.15,
+  "analyst_max_tokens": 2000,
+  "embedding": "bge-m3:567m",
+  "ndims": 1024,
+  "qdrant": "http://127.0.0.1:6334",
+  "max_points": 25,
+  "use_latest_entries": 5,
+  "process_chunks": 4,
+  "sources": [
+    "https://www.economist.com/business/rss.xml",
+    "http://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://techcrunch.com/feed/",
+    "https://thedefiant.io/api/feed",
+    "https://www.coindesk.com/arc/outboundfeeds/rss/"
+  ]
+}
