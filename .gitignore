@@ -1,1 +1,3 @@
 target/
+entry.db
+.qdrant-initialized

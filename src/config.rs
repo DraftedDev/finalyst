@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -67,18 +64,18 @@ pub struct Config {
     pub curl: String,
 
     pub rank_agent: String,
-    pub rank_preamble: PathBuf,
+    pub rank_preamble: String,
     pub rank_temperature: f64,
     pub rank_max_tokens: u64,
     pub rank_retries: u64,
 
     pub simplify_agent: String,
-    pub simplify_preamble: PathBuf,
+    pub simplify_preamble: String,
     pub simplify_temperature: f64,
     pub simplify_max_tokens: u64,
 
     pub analyst_agent: String,
-    pub analyst_preamble: PathBuf,
+    pub analyst_preamble: String,
     pub analyst_temperature: f64,
     pub analyst_max_tokens: u64,
 
@@ -96,7 +93,7 @@ pub struct Config {
 impl Config {
     pub fn load(path: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
-        if fs::exists(path).expect("Failed to check config existence") {
+        let mut value = if fs::exists(path).expect("Failed to check config existence") {
             serde_json::from_slice(&fs::read(path).expect("Failed to read config file"))
                 .expect("Failed to parse config file")
         } else {
@@ -106,62 +103,57 @@ impl Config {
                 .expect("Failed to write default config file");
 
             def
+        };
+
+        if !fs::exists(&value.rank_preamble).expect("Failed to check rank preamble existence") {
+            fs::write(&value.rank_preamble, DEFAULT_RANK_PREAMBLE)
+                .expect("Failed to write rank preamble");
         }
-    }
 
-    pub fn read_rank_preamble(&self) -> String {
-        fs::read_to_string(&self.rank_preamble)
-            .expect("Failed to read rank preamble")
-            .replace(['\t', '\n'], " ")
-            .trim()
-            .to_string()
-    }
+        value.rank_preamble =
+            fs::read_to_string(&value.rank_preamble).expect("Failed to read rank preamble");
 
-    pub fn read_simplify_preamble(&self) -> String {
-        fs::read_to_string(&self.simplify_preamble)
-            .expect("Failed to read simplify preamble")
-            .replace(['\t', '\n'], " ")
-            .trim()
-            .to_string()
-    }
+        if !fs::exists(&value.simplify_preamble)
+            .expect("Failed to check simplify preamble existence")
+        {
+            fs::write(&value.simplify_preamble, DEFAULT_SIMPLIFY_PREAMBLE)
+                .expect("Failed to write simplify preamble");
+        }
 
-    pub fn read_analyst_preamble(&self) -> String {
-        fs::read_to_string(&self.analyst_preamble)
-            .expect("Failed to read analyst preamble")
-            .replace(['\t', '\n'], " ")
-            .trim()
-            .to_string()
+        value.simplify_preamble =
+            fs::read_to_string(&value.simplify_preamble).expect("Failed to read simplify preamble");
+
+        if !fs::exists(&value.analyst_preamble).expect("Failed to check analyst preamble existence")
+        {
+            fs::write(&value.analyst_preamble, DEFAULT_ANALYST_PREAMBLE)
+                .expect("Failed to write analyst preamble");
+        }
+
+        value.analyst_preamble =
+            fs::read_to_string(&value.analyst_preamble).expect("Failed to read analyst preamble");
+
+        value
     }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let rank_preamble = "rank-preamble.txt";
-        let simplify_preamble = "simplify-preamble.txt";
-        let analyst_preamble = "analyze-preamble.txt";
-
-        fs::write(rank_preamble, DEFAULT_RANK_PREAMBLE).expect("Failed to write rank preamble");
-        fs::write(simplify_preamble, DEFAULT_SIMPLIFY_PREAMBLE)
-            .expect("Failed to write simplify preamble");
-        fs::write(analyst_preamble, DEFAULT_ANALYST_PREAMBLE)
-            .expect("Failed to write analyze preamble");
-
         Self {
             curl: "http://localhost:11434".to_string(),
 
             rank_agent: "qwen3.5:0.8b".to_string(),
-            rank_preamble: Path::new(&rank_preamble).to_path_buf(),
+            rank_preamble: "./preambles/rank-preamble.txt".to_string(),
             rank_temperature: 0.0,
             rank_max_tokens: 10,
             rank_retries: 3,
 
             simplify_agent: "gemma3:1b".to_string(),
-            simplify_preamble: Path::new(&simplify_preamble).to_path_buf(),
+            simplify_preamble: "./preambles/simplify-preamble.txt".to_string(),
             simplify_temperature: 0.3,
             simplify_max_tokens: 200,
 
             analyst_agent: "qwen2.5:3b".to_string(),
-            analyst_preamble: Path::new(&analyst_preamble).to_path_buf(),
+            analyst_preamble: "./preambles/analyze-preamble.txt".to_string(),
             analyst_temperature: 0.15,
             analyst_max_tokens: 2000,
 

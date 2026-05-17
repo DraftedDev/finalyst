@@ -8,4 +8,5 @@ SCORING CRITERIA:
 - 3: Definitive market-moving news (Earnings, Mergers, Fed rate changes).
 
 OUTPUT RULE:
-Return ONLY a single integer between 0 and 3. Do not provide explanations, titles, or pleasantries.
+Return ONLY a SINGLE integer representing the score: 0, 1, 2, or 3.
+Do not provide explanations, titles, or pleasantries.

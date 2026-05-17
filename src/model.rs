@@ -100,21 +100,21 @@ impl Model {
 
         let rank_agent = client
             .agent(&config.rank_agent)
-            .preamble(&config.read_rank_preamble())
+            .preamble(&config.rank_preamble)
             .temperature(config.rank_temperature)
             .max_tokens(config.rank_max_tokens)
             .build();
 
         let simplify_agent = client
             .agent(&config.simplify_agent)
-            .preamble(&config.read_simplify_preamble())
+            .preamble(&config.simplify_preamble)
             .temperature(config.simplify_temperature)
             .max_tokens(config.simplify_max_tokens)
             .build();
 
         let analyst_agent = client
             .agent(&config.analyst_agent)
-            .preamble(&config.read_analyst_preamble())
+            .preamble(&config.analyst_preamble)
             .temperature(config.analyst_temperature)
             .max_tokens(config.analyst_max_tokens)
             .dynamic_context(
