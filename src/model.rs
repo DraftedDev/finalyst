@@ -5,7 +5,7 @@ use qdrant_client::{
     config::QdrantConfig,
     qdrant::{CreateCollectionBuilder, QueryPointsBuilder, VectorParamsBuilder},
 };
-use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
+use redb::{Database, ReadableDatabase, ReadableTable, ReadableTableMetadata, TableDefinition};
 use rig_core::{
     agent::Agent,
     client::{CompletionClient, EmbeddingsClient},
@@ -229,6 +229,11 @@ impl Model {
         table
             .insert(entry.title.clone(), entry)
             .expect("Failed to insert entry into database");
+
+        drop(table);
+        write_tx
+            .commit()
+            .expect("Failed to commit entry database write actions");
     }
 
     async fn fetch(&self) -> Vec<FeedEntry> {
@@ -309,6 +314,11 @@ impl Model {
         let table = read_tx
             .open_table(ENTRY_TABLE)
             .expect("Failed to open entry table");
+
+        assert!(
+            !table.is_empty().expect("Failed to check if table exists"),
+            "No entries in entry table"
+        );
 
         tracing::info!("Collecting entries...");
         let mut entries = table
