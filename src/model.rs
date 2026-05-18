@@ -156,7 +156,7 @@ impl Model {
 
         // Sort entries by timestamp in descending order
         tracing::info!("Sorting entries...");
-        entries.sort_by(|a, b| b.timestamp_unix.cmp(&a.timestamp_unix));
+        entries.sort_by_key(|b| std::cmp::Reverse(b.timestamp_unix));
 
         tracing::info!("Truncating entries...");
         entries.truncate(limit);
@@ -328,8 +328,8 @@ impl Model {
             .collect::<Vec<_>>();
 
         tracing::info!("Sorting entries...");
-        entries
-            .sort_unstable_by(|a, b| b.1.value().timestamp_unix.cmp(&a.1.value().timestamp_unix));
+        entries.sort_unstable_by_key(|b| std::cmp::Reverse(b.1.value().timestamp_unix));
+
         entries.truncate(self.config.use_latest_entries);
 
         if entries.len() < self.config.use_latest_entries {
