@@ -15,6 +15,7 @@ use rig_core::{
     vector_store::InsertDocuments,
 };
 use rig_qdrant::QdrantVectorStore;
+use tracing::Level;
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
@@ -167,41 +168,51 @@ impl Model {
             self.config.process_chunks,
         );
 
-        with_progress("Processing", entries.len() as u64, |span| async move {
+        let results = with_progress("Processing", entries.len() as u64, |span| async move {
             join_chunked(
                 entries.into_iter().enumerate(),
                 self.config.process_chunks,
                 |(idx, e)| {
                     let span = span.clone();
                     async move {
-                        self.process(idx, e).await;
+                        let result = self.process(idx, e).await;
 
+                        tracing::debug!("Processed entry {}.", idx);
                         span.pb_inc(1);
+                        result
                     }
                 },
             )
             .await
         })
         .await;
+
+        let processed = results.into_iter().filter(|r| *r).count();
+
+        tracing::info!("Processed {} relevant entries.", processed);
     }
 
     #[tracing::instrument(skip(self, entry))]
-    async fn process(&self, i: usize, mut entry: FeedEntry) {
-        tracing::debug!("Processing entry: {entry:?}");
+    async fn process(&self, i: usize, mut entry: FeedEntry) -> bool {
+        if tracing::enabled!(Level::TRACE) {
+            tracing::trace!("Processing entry: {entry:?}");
+        } else if tracing::enabled!(Level::DEBUG) {
+            tracing::debug!("Processing entry: {}", entry.title);
+        }
+
+        tracing::info!("Simplifying entry...");
+        entry.content = self.simplify_entry(&entry).await;
+        tracing::debug!("Simplified entry with final content: {}", entry.content);
 
         tracing::info!("Ranking entry...");
         entry.rank = self.rank_entry(&entry).await;
         tracing::info!("Ranked entry with rank {}", entry.rank);
 
         if entry.rank == 0 {
-            tracing::info!("Skipping irrelevant entry");
+            tracing::info!("Skipping irrelevant entry.");
             tracing::debug!("Irrelevant entry: {}", entry.title);
-            return;
+            return false;
         }
-
-        tracing::info!("Simplifying entry...");
-        entry.content = self.simplify_entry(&entry).await;
-        tracing::debug!("Simplified entry with final content: {}", entry.content);
 
         let write_tx = self
             .entry_db
@@ -234,6 +245,8 @@ impl Model {
         write_tx
             .commit()
             .expect("Failed to commit entry database write actions");
+
+        true
     }
 
     async fn fetch(&self) -> Vec<FeedEntry> {

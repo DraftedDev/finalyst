@@ -26,12 +26,15 @@ pub async fn fetch(source: &str) -> Vec<FeedEntry> {
         let timestamp = entry
             .updated
             .unwrap_or_else(|| entry.published.expect("No published tag"));
-        let content = entry.summary.map(|t| t.content).unwrap_or_else(|| {
-            entry
-                .content
-                .map(|c| c.body.expect("Failed to get content body"))
-                .expect("No content given")
-        });
+        let content = entry
+            .content
+            .map(|c| c.body.expect("Failed to get content body"))
+            .unwrap_or_else(|| {
+                entry
+                    .summary
+                    .map(|txt| txt.content)
+                    .expect("No content or summary tag")
+            });
 
         if title.is_empty() || content.is_empty() {
             tracing::warn!(
