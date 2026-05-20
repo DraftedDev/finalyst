@@ -20,10 +20,8 @@
   "use_latest_entries": 5,
   "process_chunks": 4,
   "sources": [
-    "https://www.economist.com/business/rss.xml",
-    "http://feeds.marketwatch.com/marketwatch/topstories/",
-    "https://techcrunch.com/feed/",
-    "https://thedefiant.io/api/feed",
-    "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    "https://fortune.com/feed/fortune-feeds/?id=3230629",
+    "https://econbrowser.com/feed",
+    "https://economictimes.indiatimes.com/rssfeedsdefault.cms"
   ]
 }
