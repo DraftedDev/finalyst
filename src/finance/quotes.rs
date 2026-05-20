@@ -20,7 +20,8 @@ impl Tool for QuotesTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "quotes".to_string(),
-            description: "Get stock quotes for a given symbol".to_string(),
+            description: "Get stock quotes for a given symbol. All parameters are required."
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
