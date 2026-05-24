@@ -9,7 +9,7 @@ use crate::{
 
 mod cli;
 mod config;
-mod finance;
+mod fetcher;
 mod model;
 mod rss;
 mod utils;

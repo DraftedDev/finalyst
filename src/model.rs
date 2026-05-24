@@ -20,7 +20,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
     config::Config,
-    finance::quotes::QuotesTool,
+    fetcher::FinanceFetcher,
     rss::{self, FeedEntry},
     utils::{join_chunked, with_progress},
 };
@@ -122,7 +122,7 @@ impl Model {
                 config.max_points as usize,
                 QdrantVectorStore::new(vector_db.clone(), embedding.clone(), query_params.clone()),
             )
-            .tool(QuotesTool)
+            .tool(FinanceFetcher)
             .build();
 
         Self {
@@ -308,8 +308,6 @@ impl Model {
     }
 
     pub async fn analyze(&self) -> String {
-        crate::finance::try_init();
-
         let read_tx = self
             .entry_db
             .begin_read()
