@@ -9,6 +9,7 @@ use crate::{
 
 mod cli;
 mod config;
+mod extractor;
 mod fetcher;
 mod model;
 mod rss;
@@ -55,7 +56,6 @@ fn main() {
         match cli.subcommand.clone() {
             Subcommand::Analyze(args) => args.run(model).await,
             Subcommand::Reset(args) => args.run(model).await,
-            Subcommand::Collect(args) => args.run(model).await,
         }
     });
 }

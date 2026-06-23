@@ -24,7 +24,7 @@ pub fn build_date(year: i32, ordinal: u16, hours: u8) -> Result<OffsetDateTime, 
 pub struct FinanceFetcher;
 
 impl Tool for FinanceFetcher {
-    const NAME: &'static str = "quotes";
+    const NAME: &'static str = "finance_fetcher";
 
     type Error = FinanceError;
 
@@ -40,7 +40,7 @@ impl Tool for FinanceFetcher {
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "symbol": {
+                    "ticker": {
                         "type": "string",
                         "description": "The stock symbol to get quotes for"
                     },
@@ -70,7 +70,7 @@ impl Tool for FinanceFetcher {
                     }
 
                 },
-                "required": ["symbol", "start_year", "start_ordinal", "start_hours", "end_year", "end_ordinal", "end_hours"]
+                "required": ["ticker", "interval", "start_year", "start_ordinal", "start_hours", "end_year", "end_ordinal", "end_hours"]
             }),
         }
     }
@@ -82,17 +82,18 @@ impl Tool for FinanceFetcher {
             .expect("Failed to build yahoo connector");
 
         let resp = yahoo
-            .get_quote_history(
-                &args.symbol,
+            .get_quote_history_interval(
+                &args.ticker,
                 build_date(args.start_year, args.start_ordinal, args.start_hours)?,
                 build_date(args.end_year, args.end_ordinal, args.end_hours)?,
+                "1h",
             )
             .await
             .map_err(|err| err.to_string())?;
 
         let candles = resp
             .quotes()
-            .expect("Failed to get quotes")
+            .map_err(|err| err.to_string())?
             .into_iter()
             .map(|q| Candle {
                 open: q.open,
@@ -128,7 +129,7 @@ pub struct FinanceData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinanceArgs {
-    symbol: String,
+    ticker: String,
     start_year: i32,
     start_ordinal: u16,
     start_hours: u8,

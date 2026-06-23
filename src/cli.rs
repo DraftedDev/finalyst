@@ -22,8 +22,6 @@ pub enum Subcommand {
     Analyze(AnalyzeArgs),
     /// Reset the database.
     Reset(ResetArgs),
-    /// Collect and process RSS feeds without running the analysis.
-    Collect(CollectArgs),
 }
 
 /// Arguments for the `launch` subcommand.
@@ -33,9 +31,12 @@ pub struct AnalyzeArgs {}
 impl AnalyzeArgs {
     pub async fn run(self, model: Model) {
         let result = model.analyze().await;
-        println!("--------------------[ RESULT ]--------------------");
-        println!("{}", result);
-        println!("--------------------------------------------------");
+        for (i, out) in result.into_iter().enumerate() {
+            println!("---------------------[ RESPONSE {i}  ]---------------------");
+            println!("{}", out.response);
+            println!("--------------------[ EXTRACTIONS {i} ]--------------------");
+            println!("{:#?}", out.extractions);
+        }
     }
 }
 
@@ -52,20 +53,5 @@ impl ResetArgs {
 
         tracing::info!("Resetting database...");
         model.reset().await;
-    }
-}
-
-/// Arguments for the `collect` subcommand.
-#[derive(Clone, Debug, Parser)]
-pub struct CollectArgs {
-    /// Optionally limit the number of RSS feeds to collect.
-    #[clap(short = 'l', long = "limit")]
-    limit: Option<usize>,
-}
-
-impl CollectArgs {
-    pub async fn run(self, model: Model) {
-        tracing::info!("Collecting RSS feeds...");
-        model.collect(self.limit.unwrap_or(usize::MAX)).await;
     }
 }

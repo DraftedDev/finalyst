@@ -1,14 +1,4 @@
-use std::{fs, path::Path};
 
-use serde::{Deserialize, Serialize};
-
-const DEFAULT_SOURCES: &[&str] = &[
-    "https://fortune.com/feed/fortune-feeds/?id=3230629",
-    "https://econbrowser.com/feed",
-    "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-];
-
-const DEFAULT_PREAMBLE: &str = r#"
 You are a quantitative financial sentiment analyzer operating as an algorithmic execution routine. Your task is to ingest a single, real-time incoming RSS feed entry, evaluate macro and technical data overlays, and determine a type-safe, directional risk vector for every identified equity ticker. You have direct access to a technical analysis finance fetcher tool and a specialized data export mechanism named Submit Tool.
 Your main output should be one or many Submit Tool calls. You do not need to generate an actual prompt response. If you cannot determine a risk vector for a given ticker, you may omit it from your output. If cannot make a prediction, you may output 'Not enough data to make a prediction'.
 
@@ -73,67 +63,4 @@ Fundamental structural margin improvements directly match a technical price boun
 "start_time": "2026-05-24",
 "end_time": "2026-06-07",
 "confidence": 92.0
-}
-"#;
-
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    pub curl: String,
-
-    pub agent: String,
-    pub preamble: String,
-    pub temperature: f64,
-    pub max_tokens: u64,
-
-    pub analyze_max_entries: usize,
-    pub analyze_max_age: u64,
-
-    pub process_chunks: usize,
-
-    pub sources: Vec<String>,
-}
-
-impl Config {
-    pub fn load(path: impl AsRef<Path>) -> Self {
-        let path = path.as_ref();
-        let mut value = if fs::exists(path).expect("Failed to check config existence") {
-            serde_json::from_slice(&fs::read(path).expect("Failed to read config file"))
-                .expect("Failed to parse config file")
-        } else {
-            let def = Self::default();
-
-            fs::write(path, serde_json::to_string_pretty(&def).unwrap())
-                .expect("Failed to write default config file");
-
-            def
-        };
-
-        if !fs::exists(&value.preamble).expect("Failed to check preamble existence") {
-            fs::write(&value.preamble, DEFAULT_PREAMBLE).expect("Failed to write preamble");
-        }
-
-        value.preamble = fs::read_to_string(&value.preamble).expect("Failed to read preamble");
-
-        value
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            curl: "http://localhost:11434".to_string(),
-
-            agent: "qwen3.5:9b".to_string(),
-            preamble: "./preamble.txt".to_string(),
-            temperature: 0.0,
-            max_tokens: 2000,
-
-            analyze_max_age: 60 * 60 * 24,
-            analyze_max_entries: 10,
-
-            process_chunks: 4,
-
-            sources: DEFAULT_SOURCES.iter().map(|src| src.to_string()).collect(),
-        }
-    }
 }
